@@ -1,0 +1,130 @@
+{
+  "name": "AI Video Generation (n8n + Gemini + Luma AI)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 340]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [{ "name": "idea", "value": "A short cinematic clip of the Nile at sunset, drone view" }]
+        }
+      },
+      "id": "2",
+      "name": "Video Idea",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [440, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"contents\": [{ \"parts\": [{ \"text\": \"Turn this video idea into a detailed, cinematic video generation prompt. Reply with the prompt only. Idea: \" + $json.idea }] }] }",
+        "options": {}
+      },
+      "id": "3",
+      "name": "Enhance Prompt (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull the enhanced prompt out of the Gemini response.\nconst text = $json.candidates[0].content.parts.map(p => p.text).join('').trim();\nreturn [{ json: { prompt: text } }];"
+      },
+      "id": "4",
+      "name": "Extract Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.lumalabs.ai/dream-machine/v1/generations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"prompt\": \"{{ $json.prompt }}\" }",
+        "options": {}
+      },
+      "id": "5",
+      "name": "Start Generation (Luma AI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 340]
+    },
+    {
+      "parameters": { "amount": 30, "unit": "seconds" },
+      "id": "6",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1400, 340]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.lumalabs.ai/dream-machine/v1/generations/{{ $('Start Generation (Luma AI)').item.json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "7",
+      "name": "Check Video Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1640, 340]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.state }}", "value2": "completed" }]
+        }
+      },
+      "id": "8",
+      "name": "Is Video Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1880, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Video is ready: pass on its URL and metadata.\nreturn [{ json: { id: $json.id, state: $json.state, video_url: $json.assets && $json.assets.video, prompt: $json.request && $json.request.prompt } }];"
+      },
+      "id": "9",
+      "name": "Video Ready",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2120, 240]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "Video Idea", "type": "main", "index": 0 }]] },
+    "Video Idea": { "main": [[{ "node": "Enhance Prompt (Gemini)", "type": "main", "index": 0 }]] },
+    "Enhance Prompt (Gemini)": { "main": [[{ "node": "Extract Prompt", "type": "main", "index": 0 }]] },
+    "Extract Prompt": { "main": [[{ "node": "Start Generation (Luma AI)", "type": "main", "index": 0 }]] },
+    "Start Generation (Luma AI)": { "main": [[{ "node": "Wait", "type": "main", "index": 0 }]] },
+    "Wait": { "main": [[{ "node": "Check Video Status", "type": "main", "index": 0 }]] },
+    "Check Video Status": { "main": [[{ "node": "Is Video Ready?", "type": "main", "index": 0 }]] },
+    "Is Video Ready?": {
+      "main": [
+        [{ "node": "Video Ready", "type": "main", "index": 0 }],
+        [{ "node": "Wait", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "pinData": {}
+}
